@@ -16,7 +16,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('AppIndicator3', '0.1')
 gi.require_version('GdkPixbuf', '2.0')
-from gi.repository import Gtk as gtk, Gdk as gdk
+from gi.repository import Gtk as gtk, Gdk as gdk, GObject
 from gi.repository import GdkPixbuf
 from gi.repository import AppIndicator3 as appindicator
 
@@ -130,6 +130,7 @@ def main():
 
 if __name__ == "__main__":
 
+    GObject.threads_init()
     t = threading.Thread(target=server_thread)
     t.daemon = True
     t.start()
