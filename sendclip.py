@@ -29,6 +29,8 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(leve
 clipboard = gtk.Clipboard.get(gdk.SELECTION_CLIPBOARD)
 
 base_dir = os.path.abspath(os.path.dirname(__file__))
+text = None
+image = None
 
 class MainHandler(tornado.web.RequestHandler):
     def get(self):
@@ -36,16 +38,13 @@ class MainHandler(tornado.web.RequestHandler):
 
 class ClipboardHandler(tornado.web.RequestHandler):
 
-    clipboard = clipboard
-
     def get(self, clipboard_type):
-        # self.set_header("Content-Type", "text/encrypted-plain")
+        global text, image
         if clipboard_type == 'text':
-            text = self.clipboard.wait_for_text()
             if text:
+                self.set_header("Content-Type", "text/encrypted-plain")
                 self.write(rc4.crypt(text, config.password))
         elif clipboard_type == 'image':
-            image = self.clipboard.wait_for_image()
             if image is not None:
                 self.set_header("Content-Type", "image/png")
                 error, buffer = image.save_to_bufferv('png', '', '')
@@ -72,7 +71,8 @@ def receive_udp_data(data, address):
             http_client = tornado.httpclient.HTTPClient()
             response = http_client.fetch('http://%s:%d/clipboard/text' % (address[0], config.port))
             data = response.body
-            clipboard.set_text(rc4.crypt(data, config.password), -1)
+            GObject.idle_add(lambda:clipboard.set_text(rc4.crypt(data, config.password), -1) and False)
+  
         elif clipboard_type == 'image':
             http_client = tornado.httpclient.HTTPClient()
             response = http_client.fetch('http://%s:%d/clipboard/image' % (address[0], config.port))
@@ -81,7 +81,7 @@ def receive_udp_data(data, address):
             temp.write(rc4.crypt(data, config.password))
             temp.flush()
             image = GdkPixbuf.Pixbuf.new_from_file(temp.name)
-            clipboard.set_image(image)
+            GObject.idle_add(lambda:clipboard.set_image(image) and False)
             temp.close()
 
 def server_thread():
@@ -91,11 +91,16 @@ def server_thread():
     tornado.ioloop.IOLoop.current().start()
 
 def send_clipboard(source):
+    global text, image
     type_list = []
+    text = None
+    image = None
     if clipboard.wait_is_text_available():
         type_list.append('text')
+        text = clipboard.wait_for_text()
     if clipboard.wait_is_image_available():
         type_list.append('image')
+        image = clipboard.wait_for_image()
     if not type_list:
         return
     my_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
